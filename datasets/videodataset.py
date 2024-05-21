@@ -55,9 +55,10 @@ class VideoDataset(Dataset):
         if self.spatial_transform is not None:
             self.spatial_transform.randomize_parameters()
             clip = [self.spatial_transform(img) for img in clip]
+            clip = torch.stack(clip, 0)
         else:
             clip = [torch.from_numpy(np.array(c)) for c in clip]
-        clip = torch.stack(clip, 0).permute(0, 3, 2, 1)
+            clip = torch.stack(clip, 0).permute(0, 3, 2, 1)
 
         return clip
     

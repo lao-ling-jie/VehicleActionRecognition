@@ -30,7 +30,8 @@ def get_training_transform(opt):
         spatial_transform.append(ColorJitter())
     if not opt.no_hflip:
         spatial_transform.append(RandomHorizontalFlip())
-        
+    
+    spatial_transform.append(ToTensor())
     normalize = Normalize([0, 0, 0], [1, 1, 1])
     spatial_transform.append(ScaleValue(opt.value_scale))
     spatial_transform.append(normalize)
@@ -69,7 +70,7 @@ def get_testing_transform(opt):
 
 
 def get_training_data(opt):
-    dataset_name = opt.dataset_name
+    dataset_name = opt.dataset
     video_path = opt.video_path
     spatial_transform, temporal_transform = get_training_transform(opt)
 
@@ -86,7 +87,7 @@ def get_training_data(opt):
     return training_data
 
 def get_testing_data(opt):
-    dataset_name = opt.dataset_name
+    dataset_name = opt.dataset
     video_path = opt.video_path
     spatial_transform, temporal_transform = get_testing_transform(opt)
 
@@ -104,8 +105,11 @@ def get_testing_data(opt):
 
 if __name__ == "__main__":
 
-    root_path = r"C:\汽车运动视频检测\dataset0420"
-    dataset = get_training_data(video_path=root_path, dataset_name='dataset0420')
+    from train import get_args
+    args = get_args()
+    video_path = r"C:\汽车运动视频检测\dataset0420"
+    args.video_path = video_path
+    dataset = get_training_data(args)
     
     from torch.utils.data import DataLoader
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
