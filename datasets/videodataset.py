@@ -1,24 +1,28 @@
 import os
-from pathlib import Path
 import torch
-import torch.utils.data as data
+from torch.utils.data import Dataset, random_split
+from pathlib import Path
 import numpy as np
-import pdb
 from .loader import VideoLoaderAVI
 
+import pdb
 
-class VideoDataset(data.Dataset):
+
+
+class VideoDataset(Dataset):
 
     def __init__(self, 
                  root_path,
-                 spatial_transform = None,
-                 temporal_transform = None,
-                 sample_number = 5 ):
+                 spatial_transform=None,
+                 temporal_transform=None,
+                 is_train=True,
+                 sample_number=5):
         
         self.loader = VideoLoaderAVI()
         self.spatial_transform = spatial_transform
         self.temporal_transform = temporal_transform
         self.sample_number = sample_number
+        self.is_train = is_train
 
         self.data_path, self.label, self.idx2label = self.__make_dataset(root_path)
 
@@ -28,12 +32,20 @@ class VideoDataset(data.Dataset):
 
     def __make_dataset(self, root_path):
 
-        dirs = os.listdir(root_path)
-        label2idx = {d.split('_')[1]: int(d.split('_')[0]) for d in dirs}
+        dirs = [name for name in os.listdir(root_path)
+                   if os.path.isdir(os.path.join(root_path, name))]
         idx2label = {int(d.split('_')[0]): d.split('_')[1] for d in dirs}
 
-        data_path = [file.as_posix() for file in Path(root_path).rglob('*.avi')]
-        label = [label2idx[path.split('/')[-1].split('.avi')[0].split(' ')[-1]] for path in data_path]
+        data_path = []
+        label = []
+        if self.is_train:
+            filename = os.path.join(root_path, 'train_path.txt')
+        else:
+            filename = os.path.join(root_path, 'test_path.txt')
+        with open(filename, 'r') as f:
+            for line in f:
+                data_path.append(line.split(' ')[0])
+                label.append(int(line.split(' ')[1]))
 
         return data_path, label, idx2label
 
@@ -57,4 +69,3 @@ class VideoDataset(data.Dataset):
         clip = self.__loading(path)
 
         return clip, label
-

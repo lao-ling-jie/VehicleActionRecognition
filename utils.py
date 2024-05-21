@@ -1,6 +1,7 @@
 import cv2
 import os
 import json
+import random
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -57,7 +58,6 @@ def sample_frames_from_videos(root_path, frame_num):
         json.dump(video_files_dict, f)
     print(f"Data has been successfully saved to {os.path.join(root_path, 'frame_indices.json')}")
     
-
 def count_frames_and_plot_histogram(root_path):
     frame_counts = []  # 存储所有视频的帧数
 
@@ -88,7 +88,48 @@ def count_frames_and_plot_histogram(root_path):
     plt.grid(True)
     plt.show()
 
+def split_videos(root_dir, train_ratio=0.9):
+    label_dirs = [d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
+
+    train_filename = os.path.join(root_dir, 'train_path.txt')
+    test_filename = os.path.join(root_dir, 'test_path.txt')
+
+    train_file = open(train_filename, 'w')
+    test_file = open(test_filename, 'w')
+
+    # 遍历每一个类别目录
+    for label_dir in label_dirs:
+        videos = list(Path(root_dir).joinpath(label_dir).rglob('*.avi'))
+        if len(videos) == 0:
+            continue
+        
+        label = label_dir.split("_")[0]
+        # 确保至少有一个视频用于测试
+        random.shuffle(videos)
+        num_test = max(1, int(len(videos) * (1 - train_ratio)))  # 至少1个测试文件
+        test_videos = videos[:num_test]
+        train_videos = videos[num_test:]
+
+        # 测试集
+        for video in test_videos:
+            test_file.write(str(video) + ' ' + label + '\n')
+
+        # 训练集
+        for video in train_videos:
+            train_file.write(str(video) + ' ' + label + '\n')
+    
+    train_file.close()
+    test_file.close()
+
+def unify_filename(root_dir):
+    
+    data_path = [file.as_posix() for file in Path(root_dir).rglob('*.avi')]
+    for path in data_path:
+        os.rename(path, path.replace(" ", "_"))
+    print("done!")
+
 if __name__ == "__main__":
 
-    change_file_name("/data/others/ChangeLineRecognition/dataset/dataset0420")
-    # count_frames_and_plot_histogram("/data/others/ChangeLineRecognition/dataset/dataset0420")
+    data_root = "C:\汽车运动视频检测\dataset0420"
+    # change_file_name("/data/others/ChangeLineRecognition/dataset/dataset0420")
+    split_videos(data_root)
