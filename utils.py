@@ -90,5 +90,5 @@ def count_frames_and_plot_histogram(root_path):
 
 if __name__ == "__main__":
 
-    # change_file_name("dataset0420")
-    count_frames_and_plot_histogram("dataset0420")
+    change_file_name("/data/others/ChangeLineRecognition/dataset/dataset0420")
+    # count_frames_and_plot_histogram("/data/others/ChangeLineRecognition/dataset/dataset0420")

@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 import torch
 import torch.utils.data as data
-
+import numpy as np
+import pdb
 from .loader import VideoLoaderAVI
 
 
@@ -21,6 +22,10 @@ class VideoDataset(data.Dataset):
 
         self.data_path, self.label, self.idx2label = self.__make_dataset(root_path)
 
+    def __len__(self):
+        
+        return len(self.data_path)
+
     def __make_dataset(self, root_path):
 
         dirs = os.listdir(root_path)
@@ -38,7 +43,9 @@ class VideoDataset(data.Dataset):
         if self.spatial_transform is not None:
             self.spatial_transform.randomize_parameters()
             clip = [self.spatial_transform(img) for img in clip]
-        clip = torch.stack(clip, 0).permute(1, 0, 2, 3)
+        else:
+            clip = [torch.from_numpy(np.array(c)) for c in clip]
+        clip = torch.stack(clip, 0).permute(0, 3, 2, 1)
 
         return clip
     
@@ -50,6 +57,4 @@ class VideoDataset(data.Dataset):
         clip = self.__loading(path)
 
         return clip, label
-
-
 
