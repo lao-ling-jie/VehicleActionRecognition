@@ -130,6 +130,6 @@ def unify_filename(root_dir):
 
 if __name__ == "__main__":
 
-    data_root = "C:\汽车运动视频检测\dataset0420"
+    data_root = r"C:\汽车运动视频检测\dataset0420"
     # change_file_name("/data/others/ChangeLineRecognition/dataset/dataset0420")
     split_videos(data_root)

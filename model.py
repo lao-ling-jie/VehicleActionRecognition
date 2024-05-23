@@ -1,11 +1,23 @@
-from transformers import VivitConfig, VivitModel
+import torch.nn as nn
+from transformers import VivitModel
 
-# Initializing a ViViT google/vivit-b-16x2-kinetics400 style configuration
-configuration = VivitConfig()
+class VideoModel(nn.Module):
+    def __init__(self, backbone='vivit', class_num=19, pretrain=True):
+        super(VideoModel, self).__init__()
+        
+        if backbone == 'vivit':
+            self.backbone = VivitModel()
+        else:
+            raise("unsuported backbone")
+        
+        if pretrain:
+            self.backbone.from_pretrained("google/vivit-b-16x2-kinetics400")
+        
+        self.classifier = nn.Linear(768, class_num)
+    
+    def forward(self, x):
 
-# Initializing a model (with random weights) from the google/vivit-b-16x2-kinetics400 style configuration
-model = VivitModel(configuration)
-
-# Accessing the model configuration
-configuration = model.config
-print(model)
+        outputs = self.backbone(x)
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output[:, 0, :])
+        return logits

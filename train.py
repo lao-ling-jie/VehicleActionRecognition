@@ -1,4 +1,16 @@
+import os
 import argparse
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import random
+import numpy as np
+import torchvision
+from transformers import VivitModel
+from torch.utils.tensorboard import SummaryWriter
+from dataset import get_testing_data, get_training_data
+from model import VideoModel
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -65,6 +77,7 @@ def get_args():
                               '(random | center)'))
    
     # 训练超参
+    parser.add_argument('--nepoch', default=300, type=int, help='epoch number')
     parser.add_argument('--learning_rate',
                         default=0.1,
                         type=float,
@@ -75,19 +88,10 @@ def get_args():
                         default=4e-5,
                         type=float,
                         help='Weight Decay')
-    parser.add_argument(
-        '--value_scale',
-        default=1,
-        type=int,
-        help=
-        'If 1, range of inputs is [0-1]. If 255, range of inputs is [0-255].')
     parser.add_argument('--nesterov',
                         action='store_true',
                         help='Nesterov momentum')
-    parser.add_argument('--optimizer',
-                        default='sgd',
-                        type=str,
-                        help='Currently only support SGD')
+
     parser.add_argument('--lr_scheduler',
                         default='multistep',
                         type=str,
@@ -118,9 +122,56 @@ def get_args():
 
     return args
 
+def set_random_seeds(seed):
+    
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torchvision.utils.set_random_seed(seed)
+
+def train():
+
+    return
+
+@torch.no_grad()
+def test():
+    return 
+
 def main():
     
     args = get_args()
+    set_random_seeds(529)
+    if not os.path.exists('ckpts'):
+        os.makedirs('ckpts')
+
+    trainloader = get_training_data(args)
+    testloader = get_testing_data(args)
+
+    model = VideoModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
+ 
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_deacy)
+    writer = SummaryWriter('train_log/')
+
+    start_epoch = 0
+    if args.pretrain_path:
+        checkpoints = torch.load(args.pretrain_path, map_location='cpu')
+        model.load_state_dict(checkpoints['net'])
+        start_epoch = checkpoints['epoch']
+        optimizer.load_state_dict(checkpoints['optimizer'])
+
+    for epoch in range(start_epoch, args.nepoch):
+        train()
+        test()
+
+        if (epoch + 1) % 5 == 0:
+            save_info ={
+                'net':model.state_dict(),
+                'optimizer':optimizer.state_dict(),
+                'epoch':epoch
+            }
+            torch.save(save_info, f'model_{(epoch + 1)}.pth')
 
 
 if __name__ == "__main__":
