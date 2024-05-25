@@ -5,6 +5,34 @@ import random
 from pathlib import Path
 import matplotlib.pyplot as plt
 
+def get_model_dir():
+    
+    return os.path.join(os.getcwd(), 'ckpts/')
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self, name, fmt=":f"):
+        self.name = name
+        self.fmt = fmt
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def __str__(self):
+        fmtstr = "{name} {val" + self.fmt + "} ({avg" + self.fmt + "})"
+        return fmtstr.format(**self.__dict__)
+
 def change_file_name(data_root):
 
     dir_paths = os.listdir(data_root)

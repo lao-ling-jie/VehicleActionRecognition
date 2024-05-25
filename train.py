@@ -6,11 +6,11 @@ import torch.optim as optim
 import random
 import numpy as np
 import torchvision
-from transformers import VivitModel
 from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from dataset import get_testing_data, get_training_data
 from model import VideoModel
-
+from utils import AverageMeter, get_model_dir
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -78,41 +78,16 @@ def get_args():
    
     # 训练超参
     parser.add_argument('--nepoch', default=300, type=int, help='epoch number')
-    parser.add_argument('--learning_rate',
-                        default=0.1,
+    parser.add_argument('--lr',
+                        default=1e-3,
                         type=float,
-                        help=('Initial learning rate'
-                              '(divided by 10 while training by lr scheduler)'))
-    parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
-    parser.add_argument('--weight_decay',
-                        default=4e-5,
-                        type=float,
-                        help='Weight Decay')
-    parser.add_argument('--nesterov',
-                        action='store_true',
-                        help='Nesterov momentum')
-
-    parser.add_argument('--lr_scheduler',
-                        default='multistep',
-                        type=str,
-                        help='Type of LR scheduler (multistep | plateau)')
-    parser.add_argument(
-        '--multistep_milestones',
-        default=[50, 100, 150],
-        type=int,
-        nargs='+',
-        help='Milestones of LR scheduler. See documentation of MultistepLR.')
-    parser.add_argument(
-        '--overwrite_milestones',
-        action='store_true',
-        help='If true, overwriting multistep_milestones when resuming training.'
-    )
-    parser.add_argument(
-        '--plateau_patience',
-        default=10,
-        type=int,
-        help='Patience of LR scheduler. See documentation of ReduceLROnPlateau.'
-    )
+                        help=('Initial learning rate'))
+    parser.add_argument('--min_lr',
+                    default=1e-3,
+                    type=float,
+                    help=('min learning rate'))
+    parser.add_argument('--warmup_epoch',default=10,type=int,help='warmup epoch')
+    
     parser.add_argument('--batch_size',
                         default=128,
                         type=int,
@@ -130,13 +105,56 @@ def set_random_seeds(seed):
     random.seed(seed)
     torchvision.utils.set_random_seed(seed)
 
-def train():
 
-    return
+def train(trainloader, epoch, model, optimizer, criterion, writer):
+    model.train()
+    loss_meter = AverageMeter("Loss", ":.4e")
+    correct_meter = AverageMeter("Accuracy", ":.4e")
+    for batch_idx, (data, target) in enumerate(trainloader):
+
+        if torch.cuda.is_available():
+            data = data.cuda()
+            target = target.cuda()
+
+        optimizer.zero_grad()
+        output = model(data)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+
+        pred = output.data.max(1, keepdim=True)[1]
+        correct = pred.eq(target).sum().item()
+
+        loss_meter.update(loss.item(), data.shape[0])
+        correct_meter.update(correct.item(), data.shape[0])
+        
+        if batch_idx % 100 == 0:
+            print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()} Acc: {correct_meter.avg}')
+            writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
+            writer.add_scalar('Training Acc', correct_meter.avg, epoch * len(trainloader) + batch_idx)
 
 @torch.no_grad()
-def test():
-    return 
+def test(testloader, epoch, model, criterion, writer):
+    model.eval()
+    loss_meter = AverageMeter("Loss", ":.4e")
+    correct_meter = AverageMeter("Accuracy", ":.4e")
+    for batch_idx, (data, target) in enumerate(testloader):
+        
+        if torch.cuda.is_available():
+            data = data.cuda()
+            target = target.cuda()
+        
+        output = model(data)
+        loss = criterion(output, target)
+        pred = output.data.max(1, keepdim=True)[1]
+        correct = pred.eq(target).sum().item()
+
+        loss_meter.update(loss.item(), data.shape[0])
+        correct_meter.update(correct.item(), data.shape[0])
+    
+    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {correct_meter.avg}%')
+    writer.add_scalar('Test Loss', loss_meter.avg, epoch)
+    writer.add_scalar('Test Accuracy', correct_meter.avg, epoch)
 
 def main():
     
@@ -151,8 +169,16 @@ def main():
     model = VideoModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
  
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_deacy)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_deacy)
     writer = SummaryWriter('train_log/')
+
+    # 创建warmup调度器：LinearLR
+    warmup_scheduler = LinearLR(optimizer, start_factor=args.min_lr/args.lr, end_factor=1.0, total_iters=args.warmup_epoch)
+    # 创建余弦退火调度器：CosineAnnealingLR, 注意这里total_epochs需要减去warmup_epochs
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=args.nepochs - args.warmup_epoch)
+    # SequentialLR组合使用两个调度器
+    scheduler = SequentialLR(optimizer, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[args.warmup_epoch])
+
 
     start_epoch = 0
     if args.pretrain_path:
@@ -160,10 +186,18 @@ def main():
         model.load_state_dict(checkpoints['net'])
         start_epoch = checkpoints['epoch']
         optimizer.load_state_dict(checkpoints['optimizer'])
+    
+    if os.path.exists(get_model_dir()):
+        os.makedirs(get_model_dir())
+    
+    if torch.cuda.is_available():
+        model.cuda()
+        model = torch.nn.parallel(model)
 
     for epoch in range(start_epoch, args.nepoch):
-        train()
-        test()
+        train(trainloader, epoch, model, optimizer, criterion, writer)
+        test(testloader, epoch, model, criterion, writer)
+        scheduler.step()
 
         if (epoch + 1) % 5 == 0:
             save_info ={
@@ -171,7 +205,7 @@ def main():
                 'optimizer':optimizer.state_dict(),
                 'epoch':epoch
             }
-            torch.save(save_info, f'model_{(epoch + 1)}.pth')
+            torch.save(save_info, os.path.join(get_model_dir(), f'model_{(epoch + 1)}.pth'))
 
 
 if __name__ == "__main__":
