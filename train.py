@@ -12,12 +12,15 @@ from dataset import get_testing_data, get_training_data
 from model import VideoModel
 from utils import AverageMeter, get_model_dir
 
+import pdb
+
 def get_args():
     parser = argparse.ArgumentParser()
 
     # 数据处理超参
     parser.add_argument('--video_path',
                         default=None,
+                        required=True,
                         help='Directory path of videos')
     parser.add_argument(
         '--dataset',
@@ -55,6 +58,12 @@ def get_args():
               'random is uniform. '
               'corner is selection from 4 corners and 1 center. '
               '(random | corner | center)'))
+    parser.add_argument(
+        '--value_scale',
+        default=1,
+        type=int,
+        help=
+        'If 1, range of inputs is [0-1]. If 255, range of inputs is [0-255].')
     parser.add_argument('--train_crop_min_scale',
                         default=0.25,
                         type=float,
@@ -78,6 +87,7 @@ def get_args():
    
     # 训练超参
     parser.add_argument('--nepoch', default=300, type=int, help='epoch number')
+    parser.add_argument('--weight_decay', default=4e-5, type=float, help='weight decay')
     parser.add_argument('--lr',
                         default=1e-3,
                         type=float,
@@ -103,15 +113,17 @@ def set_random_seeds(seed):
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     random.seed(seed)
-    torchvision.utils.set_random_seed(seed)
 
 
 def train(trainloader, epoch, model, optimizer, criterion, writer):
     model.train()
     loss_meter = AverageMeter("Loss", ":.4e")
     correct_meter = AverageMeter("Accuracy", ":.4e")
+    batch_time = AverageMeter("Time", ":6.3f")
+    minibatch_count = len(trainloader)
     for batch_idx, (data, target) in enumerate(trainloader):
-
+        
+        pdb.set_trace()
         if torch.cuda.is_available():
             data = data.cuda()
             target = target.cuda()
@@ -122,14 +134,28 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
         loss.backward()
         optimizer.step()
 
+        batch_time.update(time.time() - end)
+        end = time.time()
+
         pred = output.data.max(1, keepdim=True)[1]
         correct = pred.eq(target).sum().item()
 
         loss_meter.update(loss.item(), data.shape[0])
         correct_meter.update(correct.item(), data.shape[0])
         
-        if batch_idx % 100 == 0:
-            print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()} Acc: {correct_meter.avg}')
+        eta = batch_time.avg * minibatch_count - batch_time.sum
+        if batch_idx % 5 == 0:
+            outputs = (
+                ["e:{},{}/{}".format(epoch, i, minibatch_count), "{:.2g} mb/s".format(1.0 / batch_time.avg),]
+                + [
+                    "passed:{:.2f}".format(batch_time.sum),
+                    "eta:{:.2f}".format(eta),
+                    "lr:{:.5f}".format(learning_rate),
+                ]
+                + ["loss:{:.6f}".format(loss.item()),]
+            )
+            
+            print(" ".join(outputs))
             writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
             writer.add_scalar('Training Acc', correct_meter.avg, epoch * len(trainloader) + batch_idx)
 
@@ -169,13 +195,13 @@ def main():
     model = VideoModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
  
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_deacy)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     writer = SummaryWriter('train_log/')
 
     # 创建warmup调度器：LinearLR
     warmup_scheduler = LinearLR(optimizer, start_factor=args.min_lr/args.lr, end_factor=1.0, total_iters=args.warmup_epoch)
     # 创建余弦退火调度器：CosineAnnealingLR, 注意这里total_epochs需要减去warmup_epochs
-    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=args.nepochs - args.warmup_epoch)
+    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=args.nepoch - args.warmup_epoch)
     # SequentialLR组合使用两个调度器
     scheduler = SequentialLR(optimizer, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[args.warmup_epoch])
 
@@ -187,12 +213,12 @@ def main():
         start_epoch = checkpoints['epoch']
         optimizer.load_state_dict(checkpoints['optimizer'])
     
-    if os.path.exists(get_model_dir()):
+    if not os.path.exists(get_model_dir()):
         os.makedirs(get_model_dir())
     
     if torch.cuda.is_available():
         model.cuda()
-        model = torch.nn.parallel(model)
+        model = torch.nn.DataParallel(model)
 
     for epoch in range(start_epoch, args.nepoch):
         train(trainloader, epoch, model, optimizer, criterion, writer)
@@ -201,7 +227,7 @@ def main():
 
         if (epoch + 1) % 5 == 0:
             save_info ={
-                'net':model.state_dict(),
+                'net':model.module.state_dict(),
                 'optimizer':optimizer.state_dict(),
                 'epoch':epoch
             }

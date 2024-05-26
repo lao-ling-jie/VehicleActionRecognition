@@ -87,7 +87,7 @@ def sample_frames_from_videos(root_path, frame_num):
     print(f"Data has been successfully saved to {os.path.join(root_path, 'frame_indices.json')}")
     
 def count_frames_and_plot_histogram(root_path):
-    frame_counts = []  # 存储所有视频的帧数
+    frame_counts = {}  # 存储所有视频的帧数
 
     # 遍历所有.avi视频文件
     for video_file in Path(root_path).rglob('*.avi'):
@@ -102,7 +102,7 @@ def count_frames_and_plot_histogram(root_path):
         
         # 获取视频总帧数并添加到列表
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_counts.append(total_frames)
+        frame_counts[video_path] = total_frames
         
         # 关闭视频文件
         cap.release()
@@ -114,7 +114,9 @@ def count_frames_and_plot_histogram(root_path):
     plt.xlabel('Frame Count')
     plt.ylabel('Number of Videos')
     plt.grid(True)
-    plt.show()
+    plt.savefig(os.path.join(root_path, 'frame_counts.png'), dpi=300)
+
+    return frame_counts
 
 def split_videos(root_dir, train_ratio=0.9):
     label_dirs = [d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
@@ -156,8 +158,25 @@ def unify_filename(root_dir):
         os.rename(path, path.replace(" ", "_"))
     print("done!")
 
+
 if __name__ == "__main__":
 
-    data_root = r"C:\汽车运动视频检测\dataset0420"
-    # change_file_name("/data/others/ChangeLineRecognition/dataset/dataset0420")
-    split_videos(data_root)
+    data_root = r"../dataset/dataset0420"
+    # unify_filename(data_root)
+    # split_videos(data_root)
+    # count_frames_and_plot_histogram(data_root)
+
+    frame_counts = count_frames_and_plot_histogram(data_root)
+    count = 0
+    label_count = {}
+    for video_path, frames in frame_counts.items():
+        if frames < 5:
+            print(video_path.replace(data_root, ''), frames)
+            label = video_path.split(".avi")[0].split('_')[-1]
+            if label not in label_count:
+                label_count[label] = 1
+            else:
+                label_count[label] += 1
+            count += 1
+    print(label_count)
+    print(count, len(frame_counts.keys()))

@@ -8,6 +8,8 @@ from datasets.temporal_transforms import (LoopPadding, TemporalRandomCrop,
                         TemporalCenterCrop, TemporalEvenCrop,
                         SlidingWindow, TemporalSubsampling)
 from datasets.temporal_transforms import Compose as TemporalCompose
+from torch.utils.data import DataLoader
+
 
 def get_training_transform(opt):
     assert opt.train_crop in ['random', 'corner', 'center']
@@ -62,8 +64,8 @@ def get_testing_transform(opt):
     temporal_transform = []
     if opt.sample_t_stride > 1:
         temporal_transform.append(TemporalSubsampling(opt.sample_t_stride))
-    temporal_transform.append(
-        TemporalEvenCrop(opt.sample_duration, opt.n_val_samples))
+    # temporal_transform.append(
+    #     TemporalEvenCrop(opt.sample_duration, opt.n_val_samples))
     temporal_transform = TemporalCompose(temporal_transform)
 
     return spatial_transform, temporal_transform
@@ -84,7 +86,9 @@ def get_training_data(opt):
     else:
         return
 
-    return training_data
+    tainloader = DataLoader(training_data, batch_size=opt.batch_size, num_workers=0, shuffle=True)
+
+    return tainloader
 
 def get_testing_data(opt):
     dataset_name = opt.dataset
@@ -100,21 +104,19 @@ def get_testing_data(opt):
                                      is_train=False)
     else:
         return
+    
+    testloader = DataLoader(testing_data, batch_size = opt.batch_size, num_workers=8, shuffle=True)
 
-    return testing_data
+    return testloader
 
 if __name__ == "__main__":
 
     from train import get_args
     args = get_args()
-    video_path = r"C:\汽车运动视频检测\dataset0420"
+    video_path = r"../dataset/dataset0420/"
     args.video_path = video_path
-    dataset = get_training_data(args)
+    dataloader = get_training_data(args)
     
-    from torch.utils.data import DataLoader
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-    for (clip, label) in dataloader:
-        print(clip.shape)
-        print(label)
-        break
+    for i, (clip, label) in enumerate(dataloader):
+        print(i)

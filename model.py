@@ -1,12 +1,13 @@
 import torch.nn as nn
 from transformers import VivitModel
+from transformers.models.vivit import VivitConfig
 
 class VideoModel(nn.Module):
     def __init__(self, backbone='vivit', class_num=19, pretrain=True):
         super(VideoModel, self).__init__()
         
         if backbone == 'vivit':
-            self.backbone = VivitModel()
+            self.backbone = VivitModel(VivitConfig())
         else:
             raise("unsuported backbone")
         

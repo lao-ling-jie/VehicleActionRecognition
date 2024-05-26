@@ -65,7 +65,7 @@ class VideoDataset(Dataset):
     def __getitem__(self, index):
 
         path = self.data_path[index]
-        label = self.label[index]
+        label = torch.tensor(self.label[index])
 
         clip = self.__loading(path)
 
