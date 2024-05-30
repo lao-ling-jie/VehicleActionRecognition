@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 import torch
 import torch.nn as nn
@@ -29,10 +30,10 @@ def get_args():
         help='Used dataset (dataset0420 | hdd)')
     parser.add_argument(
         '--n_classes',
-        default=19,
+        default=9,
         type=int,
         help=
-        'Number of classes (dataset0420: 19, hdd: xxx)'
+        'Number of classes (dataset0420: 9, hdd: xxx)'
     )
     parser.add_argument('--pretrain_path',
                         default=None,
@@ -99,7 +100,7 @@ def get_args():
     parser.add_argument('--warmup_epoch',default=10,type=int,help='warmup epoch')
     
     parser.add_argument('--batch_size',
-                        default=128,
+                        default=64,
                         type=int,
                         help='Batch Size')
 
@@ -121,13 +122,16 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
     correct_meter = AverageMeter("Accuracy", ":.4e")
     batch_time = AverageMeter("Time", ":6.3f")
     minibatch_count = len(trainloader)
+    end = time.time()
+
     for batch_idx, (data, target) in enumerate(trainloader):
         
-        pdb.set_trace()
+        learning_rate = optimizer.param_groups[0]['lr']        
+        
         if torch.cuda.is_available():
             data = data.cuda()
             target = target.cuda()
-
+        
         optimizer.zero_grad()
         output = model(data)
         loss = criterion(output, target)
@@ -137,16 +141,16 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        pred = output.data.max(1, keepdim=True)[1]
+        pred = output.data.max(1)[1]
         correct = pred.eq(target).sum().item()
-
+        
         loss_meter.update(loss.item(), data.shape[0])
-        correct_meter.update(correct.item(), data.shape[0])
+        correct_meter.update(correct, data.shape[0])
         
         eta = batch_time.avg * minibatch_count - batch_time.sum
         if batch_idx % 5 == 0:
             outputs = (
-                ["e:{},{}/{}".format(epoch, i, minibatch_count), "{:.2g} mb/s".format(1.0 / batch_time.avg),]
+                ["e:{},{}/{}".format(epoch, batch_idx, minibatch_count), "{:.2g} mb/s".format(1.0 / batch_time.avg),]
                 + [
                     "passed:{:.2f}".format(batch_time.sum),
                     "eta:{:.2f}".format(eta),
@@ -158,6 +162,7 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
             print(" ".join(outputs))
             writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
             writer.add_scalar('Training Acc', correct_meter.avg, epoch * len(trainloader) + batch_idx)
+
 
 @torch.no_grad()
 def test(testloader, epoch, model, criterion, writer):
@@ -176,7 +181,7 @@ def test(testloader, epoch, model, criterion, writer):
         correct = pred.eq(target).sum().item()
 
         loss_meter.update(loss.item(), data.shape[0])
-        correct_meter.update(correct.item(), data.shape[0])
+        correct_meter.update(correct, data.shape[0])
     
     print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {correct_meter.avg}%')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)

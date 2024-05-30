@@ -1,4 +1,5 @@
 import cv2
+import os
 from PIL import Image
 
 class VideoLoaderAVI(object):
@@ -37,3 +38,26 @@ class VideoLoaderAVI(object):
         cap.release()
         
         return video
+
+class ImageLoader(object):
+
+      def __call__(self, video_path, num_frames_to_extract):
+        
+        video = []
+        video_dir = video_path.replace("dataset0420", f"dataset0420_f{num_frames_to_extract}").split(".avi")[0]
+        for i in range(num_frames_to_extract):
+            image = Image.open(os.path.join(video_dir, str(i) + '.png'))
+            video.append(image)
+        
+        return video
+
+
+if __name__ == "__main__":
+
+    import time
+    loader = ImageLoader()
+    start_time = time.time()
+    for i in range(100):
+        video_frame = loader('/data/others/ChangeLineRecognition/dataset/dataset0420/0_InLane/scene-000005+1+1.1_InLane.avi', 5)
+    end_time = time.time()
+    print(f"Time cost:  {end_time - start_time}")

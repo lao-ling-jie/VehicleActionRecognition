@@ -15,10 +15,11 @@ class VideoDataset(Dataset):
                  root_path,
                  spatial_transform=None,
                  temporal_transform=None,
+                 loader = VideoLoaderAVI(),
                  is_train=True,
                  sample_number=5):
         
-        self.loader = VideoLoaderAVI()
+        self.loader = loader
         self.spatial_transform = spatial_transform
         self.temporal_transform = temporal_transform
         self.sample_number = sample_number
@@ -39,9 +40,9 @@ class VideoDataset(Dataset):
         data_path = []
         label = []
         if self.is_train:
-            filename = os.path.join(root_path, 'train_path.txt')
+            filename = os.path.join(root_path, 'train.txt')
         else:
-            filename = os.path.join(root_path, 'test_path.txt')
+            filename = os.path.join(root_path, 'test.txt')
         with open(filename, 'r') as f:
             for line in f:
                 data_path.append(line.split(' ')[0])

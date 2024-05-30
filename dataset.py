@@ -8,7 +8,9 @@ from datasets.temporal_transforms import (LoopPadding, TemporalRandomCrop,
                         TemporalCenterCrop, TemporalEvenCrop,
                         SlidingWindow, TemporalSubsampling)
 from datasets.temporal_transforms import Compose as TemporalCompose
+from datasets.loader import ImageLoader, VideoLoaderAVI
 from torch.utils.data import DataLoader
+
 
 
 def get_training_transform(opt):
@@ -80,13 +82,14 @@ def get_training_data(opt):
 
     if dataset_name == 'dataset0420':
         training_data = VideoDataset(video_path,
+                                     loader=ImageLoader(),
                                      spatial_transform=spatial_transform,
                                      temporal_transform=temporal_transform,
                                      is_train=True)
     else:
         return
 
-    tainloader = DataLoader(training_data, batch_size=opt.batch_size, num_workers=0, shuffle=True)
+    tainloader = DataLoader(training_data, batch_size=opt.batch_size, num_workers=16, shuffle=True)
 
     return tainloader
 
@@ -99,6 +102,7 @@ def get_testing_data(opt):
 
     if dataset_name == 'dataset0420':
         testing_data = VideoDataset(video_path,
+                                     loader=ImageLoader(),
                                      spatial_transform=spatial_transform,
                                      temporal_transform=temporal_transform,
                                      is_train=False)
@@ -113,10 +117,8 @@ if __name__ == "__main__":
 
     from train import get_args
     args = get_args()
-    video_path = r"../dataset/dataset0420/"
-    args.video_path = video_path
     dataloader = get_training_data(args)
     
 
     for i, (clip, label) in enumerate(dataloader):
-        print(i)
+        print(i, clip.shape)
