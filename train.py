@@ -6,12 +6,13 @@ import torch.nn as nn
 import torch.optim as optim
 import random
 import numpy as np
-import torchvision
+from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from dataset import get_testing_data, get_training_data
-from model import VideoModel
+from model import ViTModel, CNNModel
 from utils import AverageMeter, get_model_dir
+
 
 import pdb
 
@@ -87,6 +88,7 @@ def get_args():
                               '(random | center)'))
    
     # 训练超参
+    parser.add_argument('--backbone', default='vit', type=str, help='backbone type')
     parser.add_argument('--nepoch', default=300, type=int, help='epoch number')
     parser.add_argument('--weight_decay', default=4e-5, type=float, help='weight decay')
     parser.add_argument('--lr',
@@ -162,6 +164,7 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
             print(" ".join(outputs))
             writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
             writer.add_scalar('Training Acc', correct_meter.avg, epoch * len(trainloader) + batch_idx)
+            writer.add_scalar('lr', learning_rate, epoch * len(trainloader) + batch_idx)
 
 
 @torch.no_grad()
@@ -177,7 +180,7 @@ def test(testloader, epoch, model, criterion, writer):
         
         output = model(data)
         loss = criterion(output, target)
-        pred = output.data.max(1, keepdim=True)[1]
+        pred = output.data.max(1)[1]
         correct = pred.eq(target).sum().item()
 
         loss_meter.update(loss.item(), data.shape[0])
@@ -197,11 +200,14 @@ def main():
     trainloader = get_training_data(args)
     testloader = get_testing_data(args)
 
-    model = VideoModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
+    if args.backbone == 'vit':
+        model = ViTModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
+    else:
+        model = CNNModel(backbone='resnet18', class_num=args.n_classes)
  
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    writer = SummaryWriter('train_log/')
+    writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M')))
 
     # 创建warmup调度器：LinearLR
     warmup_scheduler = LinearLR(optimizer, start_factor=args.min_lr/args.lr, end_factor=1.0, total_iters=args.warmup_epoch)

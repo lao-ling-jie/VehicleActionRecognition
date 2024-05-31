@@ -36,7 +36,7 @@ def get_training_transform(opt):
         spatial_transform.append(RandomHorizontalFlip())
     
     spatial_transform.append(ToTensor())
-    normalize = Normalize([0, 0, 0], [1, 1, 1])
+    normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     spatial_transform.append(ScaleValue(opt.value_scale))
     spatial_transform.append(normalize)
     spatial_transform = Compose(spatial_transform)
@@ -54,7 +54,7 @@ def get_training_transform(opt):
     return spatial_transform, temporal_transform
     
 def get_testing_transform(opt):
-    normalize = Normalize([0, 0, 0], [1, 1, 1])
+    normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     spatial_transform = [
         Resize(opt.sample_size),
         CenterCrop(opt.sample_size),
@@ -76,7 +76,7 @@ def get_testing_transform(opt):
 def get_training_data(opt):
     dataset_name = opt.dataset
     video_path = opt.video_path
-    spatial_transform, temporal_transform = get_training_transform(opt)
+    spatial_transform, temporal_transform = get_testing_transform(opt)
 
     assert dataset_name in ['dataset0420', 'hdd']
 
