@@ -36,16 +36,23 @@ class CNNModel(nn.Module):
         else:
             raise("unsuported backbone")
         
-        self.lstm = nn.LSTM(input_size=512, hidden_size=512, batch_first=True)
-        self.classifier = nn.Linear(768, class_num)
+        self.lstm = nn.LSTM(input_size=512, hidden_size=512, num_layers=3, dropout=0.2, batch_first=True)
+        self.classifier = nn.Linear(512, class_num)
     
     def forward(self, x):
-       pdb.set_trace()
+
        b, t, c, h, w = x.shape
        x = x.reshape(b*t, c, h, w)
        features = self.backbone(x)
+
+       c = features.shape[1]
+       features = features.reshape(b, t, c)
        
-       features = features.reshape(b, t, )
+       t_features, _ = self.lstm(features)
+       out = t_features[:, -1, :]
+       out = self.classifier(out)
+
+       return out
 
 if __name__ == "__main__":
 
@@ -53,3 +60,4 @@ if __name__ == "__main__":
     x = torch.randn(4, 5, 3, 224, 224)
     model = CNNModel()
     output = model(x)
+    print(output.shape)
