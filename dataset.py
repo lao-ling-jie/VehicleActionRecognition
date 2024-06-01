@@ -76,7 +76,7 @@ def get_testing_transform(opt):
 def get_training_data(opt):
     dataset_name = opt.dataset
     video_path = opt.video_path
-    spatial_transform, temporal_transform = get_testing_transform(opt)
+    spatial_transform, temporal_transform = get_training_transform(opt)
 
     assert dataset_name in ['dataset0420', 'hdd']
 
