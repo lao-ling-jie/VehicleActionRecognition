@@ -138,14 +138,13 @@ def split_train_test(json_file, frame_num, ratio, per_label_num):
             if label not in labeled_videos:
                 labeled_videos[label] = []
             labeled_videos[label].append((video_path, label_name))
-
+    
     # 检查每个类别的文件数量是否满足要求，并去除不满足条件的标签
     to_remove = [label for label, videos in labeled_videos.items() if len(videos) < per_label_num]
     for label in to_remove:
         print(f"标签 '{label}' 的视频数量不足，已从划分中移除。")
         del labeled_videos[label]
 
-    pdb.set_trace()
 
     # 重新排序标签，从0到n
     sorted_labels = sorted(labeled_videos.keys())
@@ -209,6 +208,7 @@ def save_video2img(root_dir, save_dir, num_frames_to_extract=5):
 
         # 完成视频文件操作后释放资源
         cap.release()
+
 if __name__ == "__main__":
 
     data_root = "/data/others/ChangeLineRecognition/dataset/dataset0420"
@@ -216,8 +216,8 @@ if __name__ == "__main__":
     # change_file_name(data_root)
     # get_video_info(data_root)
 
-    # video_info_path = "/data/others/ChangeLineRecognition/dataset/dataset0420/video_info.json"
-    # split_train_test(video_info_path, 5, 0.1, 30)
+    video_info_path = "/data/others/ChangeLineRecognition/dataset/dataset0420/video_info.json"
+    split_train_test(video_info_path, 5, 0.1, 45)
 
-    save_video2img(data_root, data_root.replace('dataset0420', 'dataset0420_f5'), num_frames_to_extract=5)
+    # save_video2img(data_root, data_root.replace('dataset0420', 'dataset0420_f5'), num_frames_to_extract=5)
     

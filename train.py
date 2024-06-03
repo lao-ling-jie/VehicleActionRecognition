@@ -19,6 +19,11 @@ import pdb
 def get_args():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--exp_name',
+                        default=None,
+                        required=True,
+                        type=str,
+                        help='experiment name')
     # 数据处理超参
     parser.add_argument('--video_path',
                         default=None,
@@ -31,10 +36,10 @@ def get_args():
         help='Used dataset (dataset0420 | hdd)')
     parser.add_argument(
         '--n_classes',
-        default=9,
+        default=7,
         type=int,
         help=
-        'Number of classes (dataset0420: 9, hdd: xxx)'
+        'Number of classes (dataset0420: 7, hdd: xxx)'
     )
     parser.add_argument('--pretrain_path',
                         default=None,
@@ -96,7 +101,7 @@ def get_args():
                         type=float,
                         help=('Initial learning rate'))
     parser.add_argument('--min_lr',
-                    default=1e-3,
+                    default=1e-4,
                     type=float,
                     help=('min learning rate'))
     parser.add_argument('--warmup_epoch',default=10,type=int,help='warmup epoch')
@@ -121,7 +126,7 @@ def set_random_seeds(seed):
 def train(trainloader, epoch, model, optimizer, criterion, writer):
     model.train()
     loss_meter = AverageMeter("Loss", ":.4e")
-    correct_meter = AverageMeter("Accuracy", ":.4e")
+    acc_meter = AverageMeter("Accuracy", ":.4e")
     batch_time = AverageMeter("Time", ":6.3f")
     minibatch_count = len(trainloader)
     end = time.time()
@@ -145,9 +150,10 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
 
         pred = output.data.max(1)[1]
         correct = pred.eq(target).sum().item()
+        acc = correct / data.shape[0]
         
         loss_meter.update(loss.item(), data.shape[0])
-        correct_meter.update(correct, data.shape[0])
+        acc_meter.update(acc, data.shape[0])
         
         eta = batch_time.avg * minibatch_count - batch_time.sum
         if batch_idx % 5 == 0:
@@ -157,21 +163,23 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
                     "passed:{:.2f}".format(batch_time.sum),
                     "eta:{:.2f}".format(eta),
                     "lr:{:.5f}".format(learning_rate),
+                    "acc:{:.3f}".format(acc),
                 ]
                 + ["loss:{:.6f}".format(loss.item()),]
             )
             
             print(" ".join(outputs))
             writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
-            writer.add_scalar('Training Acc', correct_meter.avg, epoch * len(trainloader) + batch_idx)
+            writer.add_scalar('Training Acc', acc_meter.avg , epoch * len(trainloader) + batch_idx)
             writer.add_scalar('lr', learning_rate, epoch * len(trainloader) + batch_idx)
+    print(f'Epoch: {epoch}, Train Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
 
 
 @torch.no_grad()
 def test(testloader, epoch, model, criterion, writer):
     model.eval()
     loss_meter = AverageMeter("Loss", ":.4e")
-    correct_meter = AverageMeter("Accuracy", ":.4e")
+    acc_meter = AverageMeter("Accuracy", ":.4e")
     for batch_idx, (data, target) in enumerate(testloader):
         
         if torch.cuda.is_available():
@@ -182,13 +190,14 @@ def test(testloader, epoch, model, criterion, writer):
         loss = criterion(output, target)
         pred = output.data.max(1)[1]
         correct = pred.eq(target).sum().item()
+        acc = correct / data.shape[0]
 
         loss_meter.update(loss.item(), data.shape[0])
-        correct_meter.update(correct, data.shape[0])
+        acc_meter.update(acc, data.shape[0])
     
-    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {correct_meter.avg}%')
+    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)
-    writer.add_scalar('Test Accuracy', correct_meter.avg, epoch)
+    writer.add_scalar('Test Accuracy', acc_meter.avg, epoch)
 
 def main():
     
@@ -200,14 +209,16 @@ def main():
     trainloader = get_training_data(args)
     testloader = get_testing_data(args)
 
-    if args.backbone == 'vit':
-        model = ViTModel(backbone='vivit', class_num=args.n_classes, pretrain=True)
-    else:
+    if args.backbone == 'vivit':
+        model = ViTModel(backbone='vivit', class_num=args.n_classes, pretrain=False)
+    elif arg.backbone == 'resnet':
         model = CNNModel(backbone='resnet18', class_num=args.n_classes)
+    else:
+        raise("unsupported backbone")
  
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M')))
+    writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name))
 
     # 创建warmup调度器：LinearLR
     warmup_scheduler = LinearLR(optimizer, start_factor=args.min_lr/args.lr, end_factor=1.0, total_iters=args.warmup_epoch)
@@ -236,13 +247,13 @@ def main():
         test(testloader, epoch, model, criterion, writer)
         scheduler.step()
 
-        if (epoch + 1) % 5 == 0:
-            save_info ={
-                'net':model.module.state_dict(),
-                'optimizer':optimizer.state_dict(),
-                'epoch':epoch
-            }
-            torch.save(save_info, os.path.join(get_model_dir(), f'model_{(epoch + 1)}.pth'))
+        # if (epoch + 1) % 5 == 0:
+        #     save_info ={
+        #         'net':model.module.state_dict(),
+        #         'optimizer':optimizer.state_dict(),
+        #         'epoch':epoch
+        #     }
+        #     torch.save(save_info, os.path.join(get_model_dir(), f'model_{(epoch + 1)}.pth'))
 
 
 if __name__ == "__main__":

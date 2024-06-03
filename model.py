@@ -10,7 +10,7 @@ class ViTModel(nn.Module):
         super(ViTModel, self).__init__()
         
         if backbone == 'vivit':
-            config = VivitConfig(image_size=224, num_frames=5, num_hidden_layers=6)
+            config = VivitConfig(image_size=224, num_frames=5, num_hidden_layers=3)
             self.backbone = VivitModel(config)
         else:
             raise("unsuported backbone")
