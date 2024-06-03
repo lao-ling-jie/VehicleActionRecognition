@@ -211,7 +211,11 @@ def main():
 
     if args.backbone == 'vivit':
         model = ViTModel(backbone='vivit', class_num=args.n_classes, pretrain=False)
-    elif arg.backbone == 'resnet':
+    if args.backbone == 'timesformer':
+        model = ViTModel(backbone='timesformer', class_num=args.n_classes, pretrain=False)
+    if args.backbone == 'videomae':
+        model = ViTModel(backbone='videomae', class_num=args.n_classes, pretrain=False)
+    elif args.backbone == 'resnet':
         model = CNNModel(backbone='resnet18', class_num=args.n_classes)
     else:
         raise("unsupported backbone")

@@ -1,6 +1,6 @@
 import torch.nn as nn
-from transformers import VivitModel
-from transformers.models.vivit import VivitConfig
+from transformers import VivitModel, VivitConfig, \
+                    TimesformerModel, TimesformerConfig, VideoMAEModel, VideoMAEConfig
 from torchvision.models import resnet18
 
 
@@ -12,11 +12,20 @@ class ViTModel(nn.Module):
         if backbone == 'vivit':
             config = VivitConfig(image_size=224, num_frames=5, num_hidden_layers=3)
             self.backbone = VivitModel(config)
+            if pretrain:
+                self.backbone.from_pretrained("google/vivit-b-16x2-kinetics400")
+        elif backbone == 'timesformer':
+            config = TimesformerConfig(num_frames=5, num_hidden_layers=3)
+            self.backbone = TimesformerModel(config)
+            if pretrain:
+                self.backbone.from_pretrained("facebook/timesformer-base-finetuned-k400")
+        elif backbone == 'videomae':
+            config = VideoMAEConfig(num_frames=5, num_hidden_layers=3)
+            self.backbone = VideoMAEModel(config)
+            if pretrain:
+                self.backbone.from_pretrained("MCG-NJU/videomae-base")
         else:
             raise("unsuported backbone")
-        
-        if pretrain:
-            self.backbone.from_pretrained("google/vivit-b-16x2-kinetics400")
         
         self.classifier = nn.Linear(768, class_num)
     
@@ -58,6 +67,6 @@ if __name__ == "__main__":
 
     import torch
     x = torch.randn(4, 5, 3, 224, 224)
-    model = CNNModel()
+    model = ViTModel(backbone='timesformer', pretrain=False)
     output = model(x)
     print(output.shape)
