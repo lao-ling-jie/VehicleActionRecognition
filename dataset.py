@@ -1,4 +1,4 @@
-from datasets import VideoDataset
+from datasets import VideoDataset, VideoTransformerDataset
 from datasets.spatial_transforms import (Compose, Normalize, Resize, CenterCrop,
                         CornerCrop, MultiScaleCornerCrop,
                         RandomResizedCrop, RandomHorizontalFlip,
@@ -10,7 +10,7 @@ from datasets.temporal_transforms import (LoopPadding, TemporalRandomCrop,
 from datasets.temporal_transforms import Compose as TemporalCompose
 from datasets.loader import ImageLoader, VideoLoaderAVI
 from torch.utils.data import DataLoader
-
+from transformers import AutoImageProcessor, VivitImageProcessor
 
 
 def get_training_transform(opt):
@@ -72,6 +72,18 @@ def get_testing_transform(opt):
 
     return spatial_transform, temporal_transform
 
+def get_lib_processor(backbone):
+    assert backbone in ['vivit', 'timesformer', 'videomae']
+
+    processor_map = {
+        'vivit': VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400"),
+        'timesformer': AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400"),
+        'videomae': AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base"),
+        
+    }
+
+    return processor_map[backbone]
+
 
 def get_training_data(opt):
     dataset_name = opt.dataset
@@ -81,11 +93,22 @@ def get_training_data(opt):
     assert dataset_name in ['dataset0420', 'hdd']
 
     if dataset_name == 'dataset0420':
-        training_data = VideoDataset(video_path,
-                                     loader=ImageLoader(),
-                                     spatial_transform=spatial_transform,
-                                     temporal_transform=temporal_transform,
-                                     is_train=True)
+        if opt.aug_type == 0:
+            training_data = VideoDataset(video_path,
+                                        loader=ImageLoader(),
+                                        spatial_transform=spatial_transform,
+                                        temporal_transform=temporal_transform,
+                                        is_train=True)
+        elif opt.aug_type == 1:
+            processor = get_lib_processor(opt.backbone)
+            training_data = VideoTransformerDataset(video_path,
+                                                    processor,
+                                                    loader=ImageLoader(),
+                                                    is_train=True,
+                                                    sample_number=5
+                                                )
+        else:
+            raise("please set aug_tpye in [0 | 1]")
     else:
         return
 
@@ -101,11 +124,21 @@ def get_testing_data(opt):
     assert dataset_name in ['dataset0420', 'hdd']
 
     if dataset_name == 'dataset0420':
-        testing_data = VideoDataset(video_path,
-                                     loader=ImageLoader(),
-                                     spatial_transform=spatial_transform,
-                                     temporal_transform=temporal_transform,
-                                     is_train=False)
+        if opt.aug_type == 0:
+            testing_data = VideoDataset(video_path,
+                                        loader=ImageLoader(),
+                                        spatial_transform=spatial_transform,
+                                        temporal_transform=temporal_transform,
+                                        is_train=False)
+        elif opt.aug_type == 1:
+            processor = get_lib_processor(opt.backbone)
+            testing_data = VideoTransformerDataset(video_path,
+                                                    processor,
+                                                    loader=ImageLoader(),
+                                                    is_train=False,
+                                                    sample_number=5)
+        else:
+            raise("please set aug_tpye in [0 | 1]")
     else:
         return
     
@@ -117,6 +150,7 @@ if __name__ == "__main__":
 
     from train import get_args
     args = get_args()
+    args.backbone = "timesformer"
     dataloader = get_training_data(args)
     
 

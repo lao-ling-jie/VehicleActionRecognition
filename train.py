@@ -41,6 +41,10 @@ def get_args():
         help=
         'Number of classes (dataset0420: 7, hdd: xxx)'
     )
+    parser.add_argument('--aug_type',
+                    default=1,
+                    type=int,
+                    help='aug type (0: spatial and temporal transform by myself | 1: image processor by transformers lib)')
     parser.add_argument('--pretrain_path',
                         default=None,
                         help='Pretrained model path (.pth).')
