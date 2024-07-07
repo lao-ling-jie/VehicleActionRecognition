@@ -184,8 +184,21 @@ def test(testloader, epoch, model, criterion, writer):
     model.eval()
     loss_meter = AverageMeter("Loss", ":.4e")
     acc_meter = AverageMeter("Accuracy", ":.4e")
+    # 创建一个字典来存储每个类别的 accuracy
+    idx2label = {
+        0: 'InLane',
+        1: 'ChangingLaneLeft',
+        2: 'ChangingLaneRight',
+        3: 'ChangingTurnRight',
+        4: 'StopAndWait',
+        5: 'GoStraight',
+        6: 'TurnLeft',
+        7: 'TurnRight',
+        8: 'Driving',
+    }
+    class_accuracy = {label: 0 for label in idx2label.values()}
+    
     for batch_idx, (data, target) in enumerate(testloader):
-        
         if torch.cuda.is_available():
             data = data.cuda()
             target = target.cuda()
@@ -197,9 +210,20 @@ def test(testloader, epoch, model, criterion, writer):
         acc = correct / data.shape[0]
 
         loss_meter.update(loss.item(), data.shape[0])
-        acc_meter.update(acc, data.shape[0])
+        
+        # 计算每个类别的正确预测数量和总预测数量
+        for i in range(len(target)):
+            if pred[i] == target[i]:
+                class_accuracy[idx2label[target[i]]] += 1
+        # 更新每个类别的 accuracy
+        for label in class_accuracy.keys():
+            class_accuracy[label] /= (batch_idx + 1)
     
-    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
+    # 输出每个类别的 accuracy
+    for label, acc in class_accuracy.items():
+        print(f'Accuracy for {label}: {acc:.4f}')
+
+    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Overall Accuracy: {acc_meter.avg}')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)
     writer.add_scalar('Test Accuracy', acc_meter.avg, epoch)
 
@@ -207,8 +231,6 @@ def main():
     
     args = get_args()
     set_random_seeds(529)
-    if not os.path.exists('ckpts'):
-        os.makedirs('ckpts')
 
     trainloader = get_training_data(args)
     testloader = get_testing_data(args)
