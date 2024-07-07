@@ -6,8 +6,6 @@ from .loader import VideoLoaderAVI
 
 import pdb
 
-
-
 class VideoTransformerDataset(Dataset):
 
     def __init__(self, 
@@ -50,8 +48,8 @@ class VideoTransformerDataset(Dataset):
     def __loading(self, path):
         
         clip = self.loader(path, self.sample_number)
-        clip = self.processor(clip, return_tensors="pt")        
-
+        clip = [np.array(c) for c in clip]
+        clip = self.processor(clip, return_tensors="pt")['pixel_values'].squeeze()
         return clip
     
     def __getitem__(self, index):

@@ -1,21 +1,26 @@
-gpu = 1
+gpu = 4
 cpu = 16
 memory = 60000
 group = fingerprint
 exp_name = debug
+python3 = ~/.pyenv/versions/3.12.3/bin/python
 
-train_cnn:
-	rlaunch -P1 --charged-group=${group} --preemptible=no --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
-	python3 train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=cnn --exp_name ${exp_name} --backbone resnet
+train_resnet18:
+	rlaunch -P1 --charged-group=${group} --preemptible=yes --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
+	${python3} train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=resnet18 --exp_name=${exp_name} 
+
+train_resnet50:
+	rlaunch -P1 --charged-group=${group} --preemptible=yes --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
+	${python3} train.py --batch_size=8 --video_path=../dataset/dataset0420 --backbone=resnet50 --exp_name=${exp_name} 
 
 train_vivit:
-	rlaunch -P1 --charged-group=${group} --preemptible=no --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
-	python3 train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=vit --exp_name ${exp_name} --backbone vivit
+	rlaunch -P1 --charged-group=${group} --preemptible=yes --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
+	${python3} train.py --batch_size=64 --video_path=../dataset/dataset0420 --backbone=vivit --exp_name=${exp_name} 
 
 train_timesformer:
-	rlaunch -P1 --charged-group=${group} --preemptible=no --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
-	python3 train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=vit --exp_name ${exp_name} --backbone timesformer
+	rlaunch -P1 --charged-group=${group} --preemptible=yes --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
+	${python3} train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=timesformer --exp_name=${exp_name}
 
 train_videomae:
-	rlaunch -P1 --charged-group=${group} --preemptible=no --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
-	python3 train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=vit --exp_name ${exp_name} --backbone videomae
+	rlaunch -P1 --charged-group=${group} --preemptible=yes --negative-tags 1080ti --negative-tags p40 --cpu=${cpu} --gpu=${gpu} --memory=${memory} -- \
+	${python3} train.py --batch_size=16 --video_path=../dataset/dataset0420 --backbone=videomae --exp_name=${exp_name}

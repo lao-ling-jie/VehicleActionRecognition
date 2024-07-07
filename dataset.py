@@ -34,7 +34,7 @@ def get_training_transform(opt):
         spatial_transform.append(ColorJitter())
     if not opt.no_hflip:
         spatial_transform.append(RandomHorizontalFlip())
-    
+
     spatial_transform.append(ToTensor())
     normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     spatial_transform.append(ScaleValue(opt.value_scale))
@@ -52,7 +52,7 @@ def get_training_transform(opt):
     temporal_transform = TemporalCompose(temporal_transform)
 
     return spatial_transform, temporal_transform
-    
+
 def get_testing_transform(opt):
     normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     spatial_transform = [
@@ -79,7 +79,7 @@ def get_lib_processor(backbone):
         'vivit': VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400"),
         'timesformer': AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400"),
         'videomae': AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base"),
-        
+
     }
 
     return processor_map[backbone]
@@ -87,7 +87,7 @@ def get_lib_processor(backbone):
 
 def get_training_data(opt):
     dataset_name = opt.dataset
-    video_path = opt.video_path 
+    video_path = opt.video_path
     spatial_transform, temporal_transform = get_training_transform(opt)
 
     assert dataset_name in ['dataset0420', 'hdd']
@@ -141,7 +141,7 @@ def get_testing_data(opt):
             raise("please set aug_tpye in [0 | 1]")
     else:
         return
-    
+
     testloader = DataLoader(testing_data, batch_size = opt.batch_size, num_workers=8, shuffle=True)
 
     return testloader
@@ -150,9 +150,10 @@ if __name__ == "__main__":
 
     from train import get_args
     args = get_args()
-    args.backbone = "timesformer"
+    args.backbone = "videomae"
     dataloader = get_training_data(args)
-    
+
 
     for i, (clip, label) in enumerate(dataloader):
         print(i, clip.shape)
+        break

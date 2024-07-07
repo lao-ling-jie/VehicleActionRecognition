@@ -1,33 +1,40 @@
+import torch
 import torch.nn as nn
 from transformers import VivitModel, VivitConfig, \
-                    TimesformerModel, TimesformerConfig, VideoMAEModel, VideoMAEConfig
-from torchvision.models import resnet18
-
+                    TimesformerModel, TimesformerConfig, VideoMAEModel, VideoMAEConfig, VideoClassificationPipeline
+from torchvision.models import resnet18, resnet50
 
 import pdb
+
 class ViTModel(nn.Module):
     def __init__(self, backbone='vivit', class_num=19, pretrain=True):
         super(ViTModel, self).__init__()
         
         if backbone == 'vivit':
-            config = VivitConfig(image_size=224, num_frames=5, num_hidden_layers=3)
+            config = VivitConfig(image_size=224, 
+                                num_frames=5,
+                                num_hidden_layers=2,
+                                hidden_size=384,
+                                num_attention_heads=6,
+                                intermediate_size=1472,
+                                attention_probs_dropout_prob=0.2)
             self.backbone = VivitModel(config)
             if pretrain:
                 self.backbone.from_pretrained("google/vivit-b-16x2-kinetics400")
         elif backbone == 'timesformer':
-            config = TimesformerConfig(num_frames=5, num_hidden_layers=3)
+            config = TimesformerConfig(num_frames=5, num_hidden_layers=2)
             self.backbone = TimesformerModel(config)
             if pretrain:
                 self.backbone.from_pretrained("facebook/timesformer-base-finetuned-k400")
         elif backbone == 'videomae':
-            config = VideoMAEConfig(num_frames=5, num_hidden_layers=3)
+            config = VideoMAEConfig(num_frames=5, num_hidden_layers=2)
             self.backbone = VideoMAEModel(config)
             if pretrain:
                 self.backbone.from_pretrained("MCG-NJU/videomae-base")
         else:
             raise("unsuported backbone")
         
-        self.classifier = nn.Linear(768, class_num)
+        self.classifier = nn.Linear(384, class_num)
     
     def forward(self, x):
         outputs = self.backbone(x)
@@ -42,31 +49,38 @@ class CNNModel(nn.Module):
         if backbone == 'resnet18':
             self.backbone = resnet18(pretrained=True)
             self.backbone = nn.Sequential(*list(self.backbone.children())[:-1])
+        elif backbone == "resnet50":
+            self.backbone = resnet50(pretrained=True)
+            self.backbone = nn.Sequential(*list(self.backbone.children())[:-1])
         else:
             raise("unsuported backbone")
         
         self.lstm = nn.LSTM(input_size=512, hidden_size=512, num_layers=3, dropout=0.2, batch_first=True)
         self.classifier = nn.Linear(512, class_num)
-    
+        
     def forward(self, x):
+    
+        b, t, c, h, w = x.shape
+        x = x.reshape(b*t, c, h, w)
+        features = self.backbone(x)
 
-       b, t, c, h, w = x.shape
-       x = x.reshape(b*t, c, h, w)
-       features = self.backbone(x)
+        c = features.shape[1]
+        features = features.reshape(b, t, c)
+        self.lstm.flatten_parameters()
+        t_features, _ = self.lstm(features)
+        out = t_features[:, -1, :]
+        out = self.classifier(out)
 
-       c = features.shape[1]
-       features = features.reshape(b, t, c)
-       
-       t_features, _ = self.lstm(features)
-       out = t_features[:, -1, :]
-       out = self.classifier(out)
-
-       return out
+        return out
 
 if __name__ == "__main__":
 
     import torch
     x = torch.randn(4, 5, 3, 224, 224)
-    model = ViTModel(backbone='timesformer', pretrain=False)
+    # model = VivitModel(config=VivitConfig(image_size=224, num_frames=5,))
+    # output = model(x)
+    # print(output[0].shape)
+
+    model = CNNModel(backbone='resnet18')
     output = model(x)
     print(output.shape)

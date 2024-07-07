@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from dataset import get_testing_data, get_training_data
 from model import ViTModel, CNNModel
-from utils import AverageMeter, get_model_dir
+from utils import AverageMeter, get_model_dir, setup_logger
 
 
 import pdb
@@ -42,7 +42,7 @@ def get_args():
         'Number of classes (dataset0420: 7, hdd: xxx)'
     )
     parser.add_argument('--aug_type',
-                    default=1,
+                    default=0,
                     type=int,
                     help='aug type (0: spatial and temporal transform by myself | 1: image processor by transformers lib)')
     parser.add_argument('--pretrain_path',
@@ -97,7 +97,7 @@ def get_args():
                               '(random | center)'))
    
     # 训练超参
-    parser.add_argument('--backbone', default='vit', type=str, help='backbone type')
+    parser.add_argument('--backbone', default='vivit', type=str, help='backbone type')
     parser.add_argument('--nepoch', default=300, type=int, help='epoch number')
     parser.add_argument('--weight_decay', default=4e-5, type=float, help='weight decay')
     parser.add_argument('--lr',
@@ -127,7 +127,9 @@ def set_random_seeds(seed):
     random.seed(seed)
 
 
-def train(trainloader, epoch, model, optimizer, criterion, writer):
+def train(trainloader, epoch, model, optimizer, criterion, writer, logger):
+    logger.info(f"train: epoch {epoch}")
+    
     model.train()
     loss_meter = AverageMeter("Loss", ":.4e")
     acc_meter = AverageMeter("Accuracy", ":.4e")
@@ -172,15 +174,15 @@ def train(trainloader, epoch, model, optimizer, criterion, writer):
                 + ["loss:{:.6f}".format(loss.item()),]
             )
             
-            print(" ".join(outputs))
+            logger.info(" ".join(outputs))
             writer.add_scalar('Training Loss', loss.item(), epoch * len(trainloader) + batch_idx)
             writer.add_scalar('Training Acc', acc_meter.avg , epoch * len(trainloader) + batch_idx)
             writer.add_scalar('lr', learning_rate, epoch * len(trainloader) + batch_idx)
-    print(f'Epoch: {epoch}, Train Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
+    logger.info(f'Epoch: {epoch}, Train Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
 
 
 @torch.no_grad()
-def test(testloader, epoch, model, criterion, writer):
+def test(testloader, epoch, model, criterion, writer, logger):
     model.eval()
     loss_meter = AverageMeter("Loss", ":.4e")
     acc_meter = AverageMeter("Accuracy", ":.4e")
@@ -199,7 +201,7 @@ def test(testloader, epoch, model, criterion, writer):
         loss_meter.update(loss.item(), data.shape[0])
         acc_meter.update(acc, data.shape[0])
     
-    print(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
+    logger.info(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)
     writer.add_scalar('Test Accuracy', acc_meter.avg, epoch)
 
@@ -215,18 +217,22 @@ def main():
 
     if args.backbone == 'vivit':
         model = ViTModel(backbone='vivit', class_num=args.n_classes, pretrain=False)
-    if args.backbone == 'timesformer':
+    elif args.backbone == 'timesformer':
         model = ViTModel(backbone='timesformer', class_num=args.n_classes, pretrain=False)
-    if args.backbone == 'videomae':
+    elif args.backbone == 'videomae':
         model = ViTModel(backbone='videomae', class_num=args.n_classes, pretrain=False)
-    elif args.backbone == 'resnet':
+    elif args.backbone == 'resnet18':
         model = CNNModel(backbone='resnet18', class_num=args.n_classes)
+    elif args.backbone == 'resnet50':
+        model = CNNModel(backbone='resnet50', class_num=args.n_classes)
     else:
-        raise("unsupported backbone")
+        raise(f"unsupported backbone: {args.backbone}")
  
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name))
+    logger = setup_logger(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name), distributed_rank=0, filename='train.txt', mode="a")
+    logger.info("gpuid: {}, args: {}".format(0, args))
 
     # 创建warmup调度器：LinearLR
     warmup_scheduler = LinearLR(optimizer, start_factor=args.min_lr/args.lr, end_factor=1.0, total_iters=args.warmup_epoch)
@@ -243,25 +249,26 @@ def main():
         start_epoch = checkpoints['epoch']
         optimizer.load_state_dict(checkpoints['optimizer'])
     
-    if not os.path.exists(get_model_dir()):
-        os.makedirs(get_model_dir())
+    save_model_dir = os.path.join(get_model_dir(), datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name)
+    if not os.path.exists(save_model_dir):
+        os.makedirs(save_model_dir)
     
     if torch.cuda.is_available():
         model.cuda()
         model = torch.nn.DataParallel(model)
 
     for epoch in range(start_epoch, args.nepoch):
-        train(trainloader, epoch, model, optimizer, criterion, writer)
-        test(testloader, epoch, model, criterion, writer)
+        train(trainloader, epoch, model, optimizer, criterion, writer, logger)
+        test(testloader, epoch, model, criterion, writer, logger)
         scheduler.step()
 
-        # if (epoch + 1) % 5 == 0:
-        #     save_info ={
-        #         'net':model.module.state_dict(),
-        #         'optimizer':optimizer.state_dict(),
-        #         'epoch':epoch
-        #     }
-        #     torch.save(save_info, os.path.join(get_model_dir(), f'model_{(epoch + 1)}.pth'))
+        if (epoch + 1) % 10 == 0:
+            save_info ={
+                'net':model.module.state_dict(),
+                'optimizer':optimizer.state_dict(),
+                'epoch':epoch
+            }
+            torch.save(save_info, os.path.join(save_model_dir, f'model_{(epoch + 1)}.pth'))
 
 
 if __name__ == "__main__":
