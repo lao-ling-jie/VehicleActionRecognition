@@ -182,12 +182,30 @@ def train(trainloader, epoch, model, optimizer, criterion, writer, logger):
 
 
 @torch.no_grad()
+@torch.no_grad()
 def test(testloader, epoch, model, criterion, writer, logger):
     model.eval()
     loss_meter = AverageMeter("Loss", ":.4e")
     acc_meter = AverageMeter("Accuracy", ":.4e")
+    
+    # 创建一个字典来存储每个类别的准确率
+    idx2label = {
+        0: 'InLane',
+        1: 'ChangingLaneLeft',
+        2: 'ChangingLaneRight',
+        3: 'ChangingTurnRight',
+        4: 'StopAndWait',
+        5: 'GoStraight',
+        6: 'TurnLeft',
+        7: 'TurnRight',
+        8: 'Driving',
+    }
+    
+    # 初始化存储正确预测数量和总样本数量的字典
+    correct_counts = {label: 0 for label in idx2label.values()}
+    total_counts = {label: 0 for label in idx2label.values()}
+    
     for batch_idx, (data, target) in enumerate(testloader):
-        
         if torch.cuda.is_available():
             data = data.cuda()
             target = target.cuda()
@@ -200,8 +218,24 @@ def test(testloader, epoch, model, criterion, writer, logger):
 
         loss_meter.update(loss.item(), data.shape[0])
         acc_meter.update(acc, data.shape[0])
+        
+        # 更新正确预测数量和总样本数量
+        for i in range(len(target)):
+            label = idx2label[target[i].item()]
+            total_counts[label] += 1
+            if pred[i] == target[i]:
+                correct_counts[label] += 1
+
+    # 计算每个类别的 accuracy
+    class_accuracy = {label: (correct_counts[label] / total_counts[label] if total_counts[label] > 0 else 0) 
+                      for label in idx2label.values()}
     
-    logger.info(f'Epoch: {epoch}, Test Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
+    # 输出每个类别的 accuracy 并写入 TensorBoard
+    for label, acc in class_accuracy.items():
+        logger.info(f'Accuracy for {label}: {acc:.4f}')
+        writer.add_scalar(f'Accuracy/{label}', acc, epoch)
+    
+    logger.info(f'Epoch: {epoch}, Test Loss: {loss_meter.avg:.4e}, Overall Accuracy: {acc_meter.avg:.4f}')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)
     writer.add_scalar('Test Accuracy', acc_meter.avg, epoch)
 
@@ -227,8 +261,9 @@ def main():
         model = CNNModel(backbone='resnet50', class_num=args.n_classes)
     else:
         raise(f"unsupported backbone: {args.backbone}")
- 
-    criterion = nn.CrossEntropyLoss()
+    
+    class_weights = torch.tensor([0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).to('cuda')
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name))
     logger = setup_logger(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name), distributed_rank=0, filename='train.txt', mode="a")

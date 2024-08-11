@@ -49,14 +49,15 @@ class CNNModel(nn.Module):
         if backbone == 'resnet18':
             self.backbone = resnet18(pretrained=True)
             self.backbone = nn.Sequential(*list(self.backbone.children())[:-1])
+            feature_size = 512
         elif backbone == "resnet50":
             self.backbone = resnet50(pretrained=True)
             self.backbone = nn.Sequential(*list(self.backbone.children())[:-1])
+            feature_size = 2048
         else:
             raise("unsuported backbone")
-        
-        self.lstm = nn.LSTM(input_size=512, hidden_size=512, num_layers=3, dropout=0.2, batch_first=True)
-        self.classifier = nn.Linear(512, class_num)
+        self.lstm = nn.LSTM(input_size=feature_size, hidden_size=feature_size, num_layers=3, dropout=0.2, batch_first=True)
+        self.classifier = nn.Linear(feature_size, class_num)
         
     def forward(self, x):
     
