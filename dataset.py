@@ -1,4 +1,4 @@
-from datasets import VideoDataset, VideoTransformerDataset
+from datasets import VideoDataset, VideoTransformerDataset, TRNHDDDataLayer
 from datasets.spatial_transforms import (Compose, Normalize, Resize, CenterCrop,
                         CornerCrop, MultiScaleCornerCrop,
                         RandomResizedCrop, RandomHorizontalFlip,
@@ -66,8 +66,6 @@ def get_testing_transform(opt):
     temporal_transform = []
     if opt.sample_t_stride > 1:
         temporal_transform.append(TemporalSubsampling(opt.sample_t_stride))
-    # temporal_transform.append(
-    #     TemporalEvenCrop(opt.sample_duration, opt.n_val_samples))
     temporal_transform = TemporalCompose(temporal_transform)
 
     return spatial_transform, temporal_transform
@@ -88,6 +86,7 @@ def get_lib_processor(backbone):
 def get_training_data(opt):
     dataset_name = opt.dataset
     video_path = opt.video_path
+    nsample = opt.nsample
     spatial_transform, temporal_transform = get_training_transform(opt)
 
     assert dataset_name in ['dataset0420', 'hdd']
@@ -105,10 +104,16 @@ def get_training_data(opt):
                                                     processor,
                                                     loader=ImageLoader(),
                                                     is_train=True,
-                                                    sample_number=5
+                                                    sample_number=nsample
                                                 )
         else:
             raise("please set aug_tpye in [0 | 1]")
+    elif dataset_name == 'hdd':
+        training_data = TRNHDDDataLayer(video_path,
+                                   nsample,
+                                   spatial_transform,
+                                   None
+                                   )
     else:
         return
 
@@ -119,6 +124,7 @@ def get_training_data(opt):
 def get_testing_data(opt):
     dataset_name = opt.dataset
     video_path = opt.video_path
+    nsample = opt.nsample
     spatial_transform, temporal_transform = get_testing_transform(opt)
 
     assert dataset_name in ['dataset0420', 'hdd']
@@ -136,9 +142,16 @@ def get_testing_data(opt):
                                                     processor,
                                                     loader=ImageLoader(),
                                                     is_train=False,
-                                                    sample_number=5)
+                                                    sample_number=nsample)
         else:
             raise("please set aug_tpye in [0 | 1]")
+    elif dataset_name == 'hdd':
+        testing_data = TRNHDDDataLayer(video_path,
+                                    nsample,
+                                    spatial_transform,
+                                    None,
+                                    phase='test'
+                                    )
     else:
         return
 
@@ -148,12 +161,12 @@ def get_testing_data(opt):
 
 if __name__ == "__main__":
 
+
     from train import get_args
     args = get_args()
-    args.backbone = "videomae"
     dataloader = get_training_data(args)
 
 
-    for i, (clip, label) in enumerate(dataloader):
-        print(i, clip.shape)
+    for i, (clip, sensor, label) in enumerate(dataloader):
+        print(i, clip.shape, sensor.shape, label.shape)
         break

@@ -5,12 +5,40 @@ import random
 from pathlib import Path
 import matplotlib.pyplot as plt
 from loguru import logger
+import numpy as np
+from sklearn.metrics import average_precision_score
 
 import pdb
 
 def get_model_dir():
     
     return os.path.join(os.getcwd(), 'ckpts/')
+
+def calculate_map(pred_scores, targets, num_classes):
+    """
+    计算 mAP
+
+    参数:
+    - pred_scores: 预测分数，形状为 (num_samples, num_classes)
+    - targets: 真实标签，形状为 (num_samples,)
+    - num_classes: 类别数
+
+    返回:
+    - mAP: 平均精度均值
+    """
+    # 将 targets 转换为 one-hot 编码
+    targets_one_hot = np.zeros((targets.size, num_classes))
+    targets_one_hot[np.arange(targets.size), targets] = 1
+
+    APs = []
+    for i in range(num_classes):
+        # 针对每个类别计算AP
+        AP = average_precision_score(targets_one_hot[:, i], pred_scores[:, i])
+        APs.append(AP)
+    
+    # 计算 mAP
+    mAP = np.mean(APs)
+    return mAP, APs
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

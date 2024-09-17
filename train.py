@@ -10,8 +10,8 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
 from dataset import get_testing_data, get_training_data
-from model import ViTModel, CNNModel
-from utils import AverageMeter, get_model_dir, setup_logger
+from model import ViTModel, CNNModel, FocalLoss
+from utils import AverageMeter, get_model_dir, setup_logger, calculate_map
 
 
 import pdb
@@ -31,16 +31,20 @@ def get_args():
                         help='Directory path of videos')
     parser.add_argument(
         '--dataset',
-        default='dataset0420',
+        default='hdd',
         type=str,
         help='Used dataset (dataset0420 | hdd)')
     parser.add_argument(
         '--n_classes',
-        default=7,
+        default=12,
         type=int,
         help=
-        'Number of classes (dataset0420: 7, hdd: xxx)'
+        'Number of classes (dataset0420: 7, hdd: 12)'
     )
+    parser.add_argument('--nsample',
+                default=8,
+                type=int,
+                help='the number of input sample')
     parser.add_argument('--aug_type',
                     default=0,
                     type=int,
@@ -137,7 +141,7 @@ def train(trainloader, epoch, model, optimizer, criterion, writer, logger):
     minibatch_count = len(trainloader)
     end = time.time()
 
-    for batch_idx, (data, target) in enumerate(trainloader):
+    for batch_idx, (data, sensor, target) in enumerate(trainloader):
         
         learning_rate = optimizer.param_groups[0]['lr']        
         
@@ -147,6 +151,9 @@ def train(trainloader, epoch, model, optimizer, criterion, writer, logger):
         
         optimizer.zero_grad()
         output = model(data)
+        b, t, c = output.shape
+        output = output.reshape(b*t, c)
+        target = target.reshape(b*t)
         loss = criterion(output, target)
         loss.backward()
         optimizer.step()
@@ -181,63 +188,64 @@ def train(trainloader, epoch, model, optimizer, criterion, writer, logger):
     logger.info(f'Epoch: {epoch}, Train Loss: {loss_meter.avg}, Accuracy: {acc_meter.avg}')
 
 
-@torch.no_grad()
-@torch.no_grad()
 def test(testloader, epoch, model, criterion, writer, logger):
     model.eval()
     loss_meter = AverageMeter("Loss", ":.4e")
-    acc_meter = AverageMeter("Accuracy", ":.4e")
+    map_meter = AverageMeter("mAP", ":.4e")
     
-    # 创建一个字典来存储每个类别的准确率
     idx2label = {
-        0: 'InLane',
-        1: 'ChangingLaneLeft',
-        2: 'ChangingLaneRight',
-        3: 'ChangingTurnRight',
-        4: 'StopAndWait',
-        5: 'GoStraight',
-        6: 'TurnLeft',
-        7: 'TurnRight',
-        8: 'Driving',
+        0: "background", 
+        1: "intersection passing", 
+        2: "left turn", 
+        3: "right turn", 
+        4: "left lane change", 
+        5: "right lane change", 
+        6: "left lane branch", 
+        7: "right lane branch", 
+        8: "crosswalk passing", 
+        9: "railroad passing", 
+        10: "merge", 
+        11: "U-turn"
     }
     
-    # 初始化存储正确预测数量和总样本数量的字典
-    correct_counts = {label: 0 for label in idx2label.values()}
-    total_counts = {label: 0 for label in idx2label.values()}
-    
-    for batch_idx, (data, target) in enumerate(testloader):
+    all_preds = []
+    all_targets = []
+
+    for batch_idx, (data, sensor, target) in enumerate(testloader):
         if torch.cuda.is_available():
             data = data.cuda()
             target = target.cuda()
-        
+
         output = model(data)
+        b, t, c = output.shape
+        output = output.reshape(b*t, c)
+        target = target.reshape(b*t)
         loss = criterion(output, target)
-        pred = output.data.max(1)[1]
-        correct = pred.eq(target).sum().item()
-        acc = correct / data.shape[0]
+        
+        # 收集预测分数和真实标签
+        all_preds.append(output.detach().cpu().numpy())
+        all_targets.append(target.detach().cpu().numpy())
 
         loss_meter.update(loss.item(), data.shape[0])
-        acc_meter.update(acc, data.shape[0])
-        
-        # 更新正确预测数量和总样本数量
-        for i in range(len(target)):
-            label = idx2label[target[i].item()]
-            total_counts[label] += 1
-            if pred[i] == target[i]:
-                correct_counts[label] += 1
+        break
 
-    # 计算每个类别的 accuracy
-    class_accuracy = {label: (correct_counts[label] / total_counts[label] if total_counts[label] > 0 else 0) 
-                      for label in idx2label.values()}
-    
-    # 输出每个类别的 accuracy 并写入 TensorBoard
-    for label, acc in class_accuracy.items():
-        logger.info(f'Accuracy for {label}: {acc:.4f}')
-        writer.add_scalar(f'Accuracy/{label}', acc, epoch)
-    
-    logger.info(f'Epoch: {epoch}, Test Loss: {loss_meter.avg:.4e}, Overall Accuracy: {acc_meter.avg:.4f}')
+    # 将所有批次的预测分数和真实标签拼接在一起
+    all_preds = np.concatenate(all_preds, axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
+
+    # 计算 mAP 和每个类别的 AP
+    num_classes = len(idx2label)
+    mAP, APs = calculate_map(all_preds, all_targets, num_classes)
+    map_meter.update(mAP, len(testloader.dataset))
+
+    # 输出 mAP 和每个类别的 AP 并写入 TensorBoard
+    logger.info(f'Epoch: {epoch}, Test Loss: {loss_meter.avg:.4e}, mAP: {map_meter.avg:.4f}')
     writer.add_scalar('Test Loss', loss_meter.avg, epoch)
-    writer.add_scalar('Test Accuracy', acc_meter.avg, epoch)
+    writer.add_scalar('mAP', map_meter.avg, epoch)
+
+    for i, label in idx2label.items():
+        logger.info(f'AP for {label}: {APs[i]:.4f}')
+        writer.add_scalar(f'AP/{label}', APs[i], epoch)
 
 def main():
     
@@ -262,8 +270,8 @@ def main():
     else:
         raise(f"unsupported backbone: {args.backbone}")
     
-    class_weights = torch.tensor([0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]).to('cuda')
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # criterion = nn.CrossEntropyLoss()
+    criterion = FocalLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     writer = SummaryWriter(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name))
     logger = setup_logger(os.path.join('train_log/', datetime.now().strftime('%Y-%m-%d-%H-%M') + '_' + args.exp_name), distributed_rank=0, filename='train.txt', mode="a")
